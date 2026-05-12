@@ -44,13 +44,20 @@ jobs:
               num, title = m_title.group(1), m_title.group(2).strip()
               cat = re.search(r"^-\s*カテゴリ:\s*(.+?)\s*$", b, flags=re.M)
               line = re.search(r"^-\s*一行で:\s*(.+?)\s*$", b, flags=re.M)
+              user = re.search(r"^-\s*対象ユーザー:\s*(.+?)\s*$", b, flags=re.M)
+              pain = re.search(r"^###\s*解決する痛み\s*\n(.+?)(?=\n###|\n---|\Z)", b, flags=re.M | re.DOTALL)
               cat_s = cat.group(1).strip() if cat else ""
               line_s = line.group(1).strip() if line else ""
+              user_s = user.group(1).strip() if user else ""
+              pain_s = re.sub(r"\s+", " ", pain.group(1)).strip() if pain else ""
+              if len(pain_s) > 220:
+                  pain_s = pain_s[:217] + "..."
               header = f"**{num}. {title}**"
-              if cat_s or line_s:
-                  items.append(f"{header}\n`{cat_s}` {line_s}".rstrip())
-              else:
-                  items.append(header)
+              meta = f"`{cat_s}` {line_s}".strip()
+              who = f"対象: {user_s}" if user_s else ""
+              detail = f"> {pain_s}" if pain_s else ""
+              parts = [p for p in (header, meta, who, detail) if p]
+              items.append("\n".join(parts))
           summary = "\n\n".join(items)
           print("summary<<SUMMARY_EOF")
           print(summary)
