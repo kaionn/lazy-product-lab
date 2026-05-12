@@ -1,0 +1,65 @@
+name: Notify Discord on new candidates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ideas/**/candidates*.md'
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect newest candidates file from this push
+        id: detect
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only HEAD^ HEAD | grep -E '^ideas/.+/candidates.*\.md$' || true)
+          if [ -z "$changed" ]; then
+            echo "no_change=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          newest=$(echo "$changed" | sort -V | tail -1)
+          echo "file=$newest" >> "$GITHUB_OUTPUT"
+          week=$(echo "$newest" | sed -E 's|^ideas/([0-9]+)/W([0-9]+)/.*|\1-W\2|')
+          echo "week=$week" >> "$GITHUB_OUTPUT"
+          titles=$(grep -E '^## [0-9]+\.' "$newest" | sed 's/^## //')
+          {
+            echo 'titles<<EOF'
+            echo "$titles"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post to Discord webhook
+        if: steps.detect.outputs.no_change != 'true'
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          FILE: ${{ steps.detect.outputs.file }}
+          WEEK: ${{ steps.detect.outputs.week }}
+          TITLES: ${{ steps.detect.outputs.titles }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "::error::secret DISCORD_WEBHOOK_URL is not set"
+            exit 1
+          fi
+          URL="https://github.com/${REPO}/blob/main/${FILE}"
+          MSG=$(printf ':sparkles: **lazy-product-lab %s** の 3 案できたのだ！\n\n%s\n\n<%s>\n\n気に入ったら `/lazy-product-pick <番号>` で深掘りするのだ' "$WEEK" "$TITLES" "$URL")
+          payload=$(jq -nc --arg c "$MSG" '{content: $c}')
+          http=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
+            -X POST -H 'Content-Type: application/json' \
+            --data-raw "$payload" \
+            "$WEBHOOK")
+          echo "Discord HTTP $http"
+          cat /tmp/resp.txt
+          if [ "$http" != "204" ] && [ "$http" != "200" ]; then
+            exit 1
+          fi
