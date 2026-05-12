@@ -30,12 +30,32 @@ jobs:
           echo "file=$newest" >> "$GITHUB_OUTPUT"
           week=$(echo "$newest" | sed -E 's|^ideas/([0-9]+)/W([0-9]+)/.*|\1-W\2|')
           echo "week=$week" >> "$GITHUB_OUTPUT"
-          titles=$(grep -E '^## [0-9]+\.' "$newest" | sed 's/^## //')
-          {
-            echo 'titles<<EOF'
-            echo "$titles"
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
+          python3 - "$newest" <<'PY' >> "$GITHUB_OUTPUT"
+          import os, re, sys
+          path = sys.argv[1]
+          with open(path, encoding="utf-8") as f:
+              text = f.read()
+          blocks = re.split(r"^---\s*$", text, flags=re.M)
+          items = []
+          for b in blocks:
+              m_title = re.search(r"^## (\d+)\.\s+(.+?)\s*$", b, flags=re.M)
+              if not m_title:
+                  continue
+              num, title = m_title.group(1), m_title.group(2).strip()
+              cat = re.search(r"^-\s*カテゴリ:\s*(.+?)\s*$", b, flags=re.M)
+              line = re.search(r"^-\s*一行で:\s*(.+?)\s*$", b, flags=re.M)
+              cat_s = cat.group(1).strip() if cat else ""
+              line_s = line.group(1).strip() if line else ""
+              header = f"**{num}. {title}**"
+              if cat_s or line_s:
+                  items.append(f"{header}\n`{cat_s}` {line_s}".rstrip())
+              else:
+                  items.append(header)
+          summary = "\n\n".join(items)
+          print("summary<<SUMMARY_EOF")
+          print(summary)
+          print("SUMMARY_EOF")
+          PY
 
       - name: Post to Discord webhook
         if: steps.detect.outputs.no_change != 'true'
@@ -43,7 +63,7 @@ jobs:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
           FILE: ${{ steps.detect.outputs.file }}
           WEEK: ${{ steps.detect.outputs.week }}
-          TITLES: ${{ steps.detect.outputs.titles }}
+          SUMMARY: ${{ steps.detect.outputs.summary }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -52,7 +72,7 @@ jobs:
             exit 1
           fi
           URL="https://github.com/${REPO}/blob/main/${FILE}"
-          MSG=$(printf ':sparkles: **lazy-product-lab %s** の 3 案できたのだ！\n\n%s\n\n<%s>\n\n気に入ったら `/lazy-product-pick <番号>` で深掘りするのだ' "$WEEK" "$TITLES" "$URL")
+          MSG=$(printf ':sparkles: **lazy-product-lab %s** の 3 案できたのだ！\n\n%s\n\n<%s>\n\n気に入ったら `/lazy-product-pick <番号>` で深掘りするのだ' "$WEEK" "$SUMMARY" "$URL")
           payload=$(jq -nc --arg c "$MSG" '{content: $c}')
           http=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
             -X POST -H 'Content-Type: application/json' \
