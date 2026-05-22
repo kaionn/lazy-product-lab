@@ -89,7 +89,7 @@ Python + PyAudio + SQLite + Flask + Chart.js、Raspberry Pi OS Lite 上で syste
 
 ## 選び方
 
-- どれを 1 週間使う? ローカルで `/lazy-product-pick 1` か `2` か `3` で選んで深掘りするのだ
+- どれを 1 週間使う? 各案の :arrow_forward: 「Select」リンクをクリックして Submit するか、ローカルで `/lazy-product-pick` を実行するのだ
 - 全部却下なら `/lazy-product-generate` を再実行で OK なのだ
 
 > Rejected: #2 (BarShelf) at 2026-05-23 — 一度 pick したが選定フロー自体を見直すため不採用に戻した
