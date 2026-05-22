@@ -58,13 +58,10 @@ jobs:
               line_s = line.group(1).strip() if line else ""
               user_s = user.group(1).strip() if user else ""
               pain_s = re.sub(r"\s+", " ", pain.group(1)).strip() if pain else ""
-              if len(pain_s) > 220:
-                  pain_s = pain_s[:217] + "..."
+              if len(pain_s) > 140:
+                  pain_s = pain_s[:137] + "..."
               issue_title = f"Select: {year}-W{week}-{batch}#{num} {title}"
-              issue_body = (
-                  f"From: `{path}` #{num}\n\n"
-                  f"このまま Submit すると Actions が `selected.md` スタブを生成するのだ。\n"
-              )
+              issue_body = f"From: `{path}` #{num}"
               select_url = (
                   f"https://github.com/{repo}/issues/new"
                   f"?labels=select"
