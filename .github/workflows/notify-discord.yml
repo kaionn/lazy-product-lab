@@ -30,9 +30,17 @@ jobs:
           echo "file=$newest" >> "$GITHUB_OUTPUT"
           week=$(echo "$newest" | sed -E 's|^ideas/([0-9]+)/W([0-9]+)/.*|\1-W\2|')
           echo "week=$week" >> "$GITHUB_OUTPUT"
-          python3 - "$newest" <<'PY' >> "$GITHUB_OUTPUT"
+          python3 - "$newest" "${{ github.repository }}" <<'PY' >> "$GITHUB_OUTPUT"
           import os, re, sys
+          from urllib.parse import quote
           path = sys.argv[1]
+          repo = sys.argv[2]
+          fname = os.path.basename(path)
+          m_batch = re.match(r"candidates(?:-(\d+))?\.md$", fname)
+          batch = int(m_batch.group(1)) if m_batch and m_batch.group(1) else 1
+          m_week = re.search(r"ideas/(\d{4})/W(\d{1,2})/", path)
+          year = m_week.group(1) if m_week else ""
+          week = m_week.group(2).zfill(2) if m_week else ""
           with open(path, encoding="utf-8") as f:
               text = f.read()
           blocks = re.split(r"^---\s*$", text, flags=re.M)
@@ -52,11 +60,23 @@ jobs:
               pain_s = re.sub(r"\s+", " ", pain.group(1)).strip() if pain else ""
               if len(pain_s) > 220:
                   pain_s = pain_s[:217] + "..."
+              issue_title = f"Select: {year}-W{week}-{batch}#{num} {title}"
+              issue_body = (
+                  f"From: `{path}` #{num}\n\n"
+                  f"このまま Submit すると Actions が `selected.md` スタブを生成するのだ。\n"
+              )
+              select_url = (
+                  f"https://github.com/{repo}/issues/new"
+                  f"?labels=select"
+                  f"&title={quote(issue_title)}"
+                  f"&body={quote(issue_body)}"
+              )
               header = f"**{num}. {title}**"
               meta = f"`{cat_s}` {line_s}".strip()
               who = f"対象: {user_s}" if user_s else ""
               detail = f"> {pain_s}" if pain_s else ""
-              parts = [p for p in (header, meta, who, detail) if p]
+              action = f":arrow_forward: [これを Select する]({select_url})"
+              parts = [p for p in (header, meta, who, detail, action) if p]
               items.append("\n".join(parts))
           summary = "\n\n".join(items)
           print("summary<<SUMMARY_EOF")
@@ -79,7 +99,7 @@ jobs:
             exit 1
           fi
           URL="https://github.com/${REPO}/blob/main/${FILE}"
-          MSG=$(printf ':sparkles: **lazy-product-lab %s** の 3 案できたのだ！\n\n%s\n\n<%s>\n\n気に入ったら `/lazy-product-pick <番号>` で深掘りするのだ' "$WEEK" "$SUMMARY" "$URL")
+          MSG=$(printf ':sparkles: **lazy-product-lab %s** の 3 案できたのだ！\n\n%s\n\n<%s>\n\n気に入った案の :arrow_forward: 「Select」リンクをクリックして Submit するだけで深掘りが走るのだ。' "$WEEK" "$SUMMARY" "$URL")
           payload=$(jq -nc --arg c "$MSG" '{content: $c}')
           http=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
             -X POST -H 'Content-Type: application/json' \

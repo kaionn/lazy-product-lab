@@ -1,0 +1,233 @@
+name: Select idea from Issue
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  select:
+    if: |
+      contains(github.event.issue.labels.*.name, 'select') &&
+      startsWith(github.event.issue.title, 'Select:')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Parse issue title
+        id: parse
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, re, sys
+          title = os.environ["ISSUE_TITLE"]
+          # 期待形式: "Select: 2026-W21-3#2 BarShelf"
+          m = re.match(r"^Select:\s+(\d{4})-W(\d{1,2})-(\d+)#(\d+)\s+(.+)$", title.strip())
+          if not m:
+              sys.stderr.write(f"::error::Issue title does not match expected format: {title}\n")
+              sys.exit(1)
+          year, week, batch, item, idea_title = m.groups()
+          week = week.zfill(2)
+          batch = int(batch)
+          if batch == 1:
+              fname = "candidates.md"
+          else:
+              fname = f"candidates-{batch}.md"
+          week_dir = f"ideas/{year}/W{week}"
+          path = f"{week_dir}/{fname}"
+          print(f"year={year}")
+          print(f"week={week}")
+          print(f"batch={batch}")
+          print(f"item={item}")
+          print(f"title={idea_title}")
+          print(f"week_dir={week_dir}")
+          print(f"candidates_path={path}")
+          # slug 生成 (ASCII safe)
+          slug = re.sub(r"[^A-Za-z0-9]+", "-", idea_title).strip("-").lower()
+          if not slug:
+              slug = f"idea-{year}-w{week}-{batch}-{item}"
+          print(f"slug={slug}")
+          PY
+
+      - name: Validate candidates file & extract section
+        id: extract
+        env:
+          CANDIDATES_PATH: ${{ steps.parse.outputs.candidates_path }}
+          ITEM: ${{ steps.parse.outputs.item }}
+          EXPECTED_TITLE: ${{ steps.parse.outputs.title }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$CANDIDATES_PATH" ]; then
+            echo "::error::candidates file not found: $CANDIDATES_PATH"
+            exit 1
+          fi
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, re, sys
+          path = os.environ["CANDIDATES_PATH"]
+          item = int(os.environ["ITEM"])
+          expected = os.environ["EXPECTED_TITLE"].strip()
+          with open(path, encoding="utf-8") as f:
+              text = f.read()
+          blocks = re.split(r"^---\s*$", text, flags=re.M)
+          section = None
+          actual_title = None
+          for b in blocks:
+              m = re.search(r"^## (\d+)\.\s+(.+?)\s*$", b, flags=re.M)
+              if not m:
+                  continue
+              if int(m.group(1)) == item:
+                  section = b.strip()
+                  actual_title = m.group(2).strip()
+                  break
+          if section is None:
+              sys.stderr.write(f"::error::item #{item} not found in {path}\n")
+              sys.exit(1)
+          if actual_title != expected:
+              sys.stderr.write(f"::warning::title mismatch (expected={expected!r}, actual={actual_title!r}); using actual\n")
+          # GitHub Output: multiline
+          delim = "SECTION_EOF"
+          print(f"section<<{delim}")
+          print(section)
+          print(delim)
+          print(f"actual_title={actual_title}")
+          PY
+
+      - name: Generate selected.md stub
+        id: generate
+        env:
+          WEEK_DIR: ${{ steps.parse.outputs.week_dir }}
+          CANDIDATES_PATH: ${{ steps.parse.outputs.candidates_path }}
+          ITEM: ${{ steps.parse.outputs.item }}
+          ACTUAL_TITLE: ${{ steps.extract.outputs.actual_title }}
+          SECTION: ${{ steps.extract.outputs.section }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          YEAR: ${{ steps.parse.outputs.year }}
+          WEEK: ${{ steps.parse.outputs.week }}
+          BATCH: ${{ steps.parse.outputs.batch }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$WEEK_DIR"
+          # 既存 selected.md があれば selected-2.md, -3.md と連番にする
+          base="$WEEK_DIR/selected"
+          target="${base}.md"
+          if [ -f "$target" ]; then
+            n=2
+            while [ -f "${base}-${n}.md" ]; do
+              n=$((n+1))
+            done
+            target="${base}-${n}.md"
+          fi
+          echo "selected_path=$target" >> "$GITHUB_OUTPUT"
+
+          # スタブ生成
+          now=$(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST')
+          {
+            echo "# Week ${YEAR}-W${WEEK} Selected: ${ACTUAL_TITLE}"
+            echo
+            echo "> Picked: ${now}"
+            echo "> From: $(basename "$CANDIDATES_PATH") #${ITEM}"
+            echo "> Status: picked"
+            echo "> Selected via: #${ISSUE_NUMBER}"
+            echo
+            echo "## TL;DR"
+            echo
+            echo "_未深掘り (Stage 1 スタブ)。ローカルで \`/lazy-product-pick\` を実行すると深掘り版で上書きされる。_"
+            echo
+            echo "## 元の候補"
+            echo
+            echo "<details>"
+            echo "<summary>candidates から転記</summary>"
+            echo
+            echo "${SECTION}"
+            echo
+            echo "</details>"
+            echo
+            echo "## 次のアクション"
+            echo
+            echo "- [ ] ローカルで \`/lazy-product-pick\` を実行して深掘り (Stage 2)"
+            echo "- [ ] \`/lazy-product-bootstrap\` で雛形リポを作成 (Stage 3)"
+          } > "$target"
+
+      - name: Mark candidates with Selected line
+        env:
+          CANDIDATES_PATH: ${{ steps.parse.outputs.candidates_path }}
+          ITEM: ${{ steps.parse.outputs.item }}
+          ACTUAL_TITLE: ${{ steps.extract.outputs.actual_title }}
+        run: |
+          set -euo pipefail
+          today=$(TZ=Asia/Tokyo date '+%Y-%m-%d')
+          line="> Selected: #${ITEM} (${ACTUAL_TITLE}) at ${today}"
+          # 既に同じ行が無ければ末尾に追記
+          if ! grep -Fxq "$line" "$CANDIDATES_PATH"; then
+            printf '\n%s\n' "$line" >> "$CANDIDATES_PATH"
+          fi
+
+      - name: Commit & push
+        id: commit
+        env:
+          SELECTED_PATH: ${{ steps.generate.outputs.selected_path }}
+          CANDIDATES_PATH: ${{ steps.parse.outputs.candidates_path }}
+          YEAR: ${{ steps.parse.outputs.year }}
+          WEEK: ${{ steps.parse.outputs.week }}
+          ACTUAL_TITLE: ${{ steps.extract.outputs.actual_title }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$SELECTED_PATH" "$CANDIDATES_PATH"
+          git commit -m "selected: ${YEAR}-W${WEEK} - ${ACTUAL_TITLE} (stub via Issue)"
+          git push origin HEAD:main
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          SELECTED_PATH: ${{ steps.generate.outputs.selected_path }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+          url="https://github.com/${REPO}/blob/main/${SELECTED_PATH}"
+          body=$(cat <<EOF
+          スタブを生成したのだ！
+
+          - [\`${SELECTED_PATH}\`](${url})
+          - commit: ${SHA}
+
+          深掘りはローカルで \`/lazy-product-pick\` を実行するのだ。雛形まで作るなら \`/lazy-product-bootstrap\` まで。
+          EOF
+          )
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$body"
+          gh issue close "$ISSUE_NUMBER" --repo "$REPO" --reason completed
+
+      - name: Comment on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          body=$(cat <<EOF
+          :warning: select に失敗したのだ。
+
+          - Run: ${RUN_URL}
+          - Title 形式: \`Select: YYYY-Www-batch#item Title\` (例: \`Select: 2026-W21-3#2 BarShelf\`)
+
+          タイトルを修正するか、再度通知から Select リンクを踏み直すのだ。
+          EOF
+          )
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$body"
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "select-failed"
