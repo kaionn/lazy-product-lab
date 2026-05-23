@@ -94,4 +94,3 @@ Python + PyAudio + SQLite + Flask + Chart.js、Raspberry Pi OS Lite 上で syste
 
 > Rejected: #2 (BarShelf) at 2026-05-23 — 選定フロー自体の見直しに伴う取り下げ
 
-> Selected: #3 (NoiseSleepLog) at 2026-05-23
