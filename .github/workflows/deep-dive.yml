@@ -1,0 +1,108 @@
+name: Deep dive selected idea (experimental)
+
+# Select 済み Issue に `deep-dive` ラベルを付けると、Claude が selected*.md の
+# スタブを深掘り版 (Status: idea) で上書きして push する。
+# repo secret ANTHROPIC_API_KEY が必要。未設定なら案内コメントだけ残して終わる。
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: deep-dive-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  deepdive:
+    if: |
+      github.event.label.name == 'deep-dive' &&
+      startsWith(github.event.issue.title, 'Select:')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check ANTHROPIC_API_KEY
+        id: key
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "${KEY:-}" ]; then
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Comment setup instructions (key missing)
+        if: steps.key.outputs.missing == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body \
+            ":key: repo secret \`ANTHROPIC_API_KEY\` が未設定だから自動 Deep Dive はできないのだ。Settings → Secrets に追加するか、ローカルで \`/lazy-product-pick\` を実行するのだ。"
+
+      - uses: actions/checkout@v4
+        if: steps.key.outputs.missing != 'true'
+        with:
+          ref: main
+
+      - name: Run Claude deep dive
+        if: steps.key.outputs.missing != 'true'
+        uses: anthropics/claude-code-action@v1
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: '--allowedTools "Read,Write,Edit,Glob,Grep" --max-turns 40'
+          prompt: |
+            環境変数 ISSUE_TITLE の Issue タイトル (形式 "Select: YYYY-Www-batch#item Title") から
+            対象の週ディレクトリ ideas/{YYYY}/W{ww}/ を特定し、その中でタイトルが一致する
+            selected*.md (「> Status: picked」のスタブ) を見つけて、深掘り版で上書きしてほしい。
+
+            深掘り版の要件:
+            - 冒頭のメタ行 (> Picked / > From / > Selected via) は保持し、「> Status: picked」を「> Status: idea」に変更、「> Deep dived: {今日の日付} (via Actions)」を追記
+            - セクション構成: ## TL;DR (3 行以内) / ## ペルソナ (具体的な 1 人) / ## MVP 機能 (5 個以内、雑で OK) / ## 技術スケッチ (スタック + 構成 10 行以内) / ## 1 週間スケジュール (Day 1-7 の表) / ## 撤退基準 (これを満たさなければ捨てる、の 1-2 行)
+            - 元候補のセクション (<details> ブロック) は文末に保持する
+            - このプロダクトのルールは「雑であることを許す。1 週間で MVP。つまらなかったら撤退」。過剰設計しない
+            - selected*.md の上書き以外のファイル変更はしない
+
+      - name: Commit & push
+        if: steps.key.outputs.missing != 'true'
+        id: commit
+        env:
+          # Issue タイトルは attacker-controllable。シェル展開せず env 経由で渡す
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- ideas; then
+            echo "::warning::deep dive produced no changes"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ideas
+          git commit -m "deep-dive: ${ISSUE_TITLE} (via Actions)"
+          git push origin HEAD:main
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Comment result
+        if: steps.key.outputs.missing != 'true' && steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body \
+            ":brain: Deep Dive 完了なのだ。selected.md が深掘り版 (Status: idea) に更新されたのだ。次は \`/lazy-product-bootstrap\` で雛形を作るのだ。"
+
+      - name: Comment on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body \
+            ":warning: 自動 Deep Dive に失敗したのだ。ローカルで \`/lazy-product-pick\` を使うのだ。Run: ${RUN_URL}"
