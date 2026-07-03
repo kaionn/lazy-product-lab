@@ -1,0 +1,120 @@
+name: Weekly digest to Discord
+
+# 日曜 20:00 JST に今週のまとめを Discord へ:
+# 1. 今週生成した案と select/reject 状況
+# 2. 撤退判断待ち (Picked から 7 日以上経過した selected)
+# 3. GIT_PUSH_TOKEN (fine-grained PAT) の期限警告 (.github/pat-expiry 基準)
+on:
+  schedule:
+    - cron: '0 11 * * 0' # 日曜 11:00 UTC = 20:00 JST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build digest message
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re
+          from datetime import date, datetime
+          from pathlib import Path
+
+          repo = os.environ["REPO"]
+          today = date.today()
+          iso_year, iso_week, _ = today.isocalendar()
+          week_dir = Path(f"ideas/{iso_year}/W{iso_week:02d}")
+
+          # --- 1. 今週の案 ---
+          idea_lines = []
+          for path in sorted(week_dir.glob("candidates*.md")):
+              m_batch = re.match(r"candidates(?:-(\d+))?\.md$", path.name)
+              batch = int(m_batch.group(1)) if m_batch and m_batch.group(1) else 1
+              text = path.read_text(encoding="utf-8")
+              selected = {int(m.group(1)) for m in re.finditer(r"^> Selected:\s*#(\d+)", text, flags=re.M)}
+              rejected = {int(m.group(1)) for m in re.finditer(r"^> Rejected:\s*#(\d+)", text, flags=re.M)}
+              for b in re.split(r"^---\s*$", text, flags=re.M):
+                  m = re.search(r"^## (\d+)\.\s+(.+?)\s*$", b, flags=re.M)
+                  if not m:
+                      continue
+                  num, title = int(m.group(1)), m.group(2).strip()
+                  mark = ":white_check_mark:" if num in selected else (":wastebasket:" if num in rejected else ":hourglass:")
+                  idea_lines.append(f"{mark} W{iso_week:02d}-{batch}#{num} {title}")
+
+          # --- 2. 撤退判断待ち ---
+          stale_lines = []
+          for path in sorted(Path("ideas").glob("*/W*/selected*.md")):
+              text = path.read_text(encoding="utf-8")
+              m_status = re.search(r"^> Status:\s*(\w+)", text, flags=re.M)
+              if not m_status or m_status.group(1) not in ("picked", "idea"):
+                  continue  # bootstrap 済み等は対象外
+              m_picked = re.search(r"^> Picked:\s*(\d{4}-\d{2}-\d{2})", text, flags=re.M)
+              if not m_picked:
+                  continue
+              picked = datetime.strptime(m_picked.group(1), "%Y-%m-%d").date()
+              days = (today - picked).days
+              if days < 7:
+                  continue
+              m_title = re.search(r"^# .*Selected:\s*(.+?)\s*$", text, flags=re.M)
+              title = m_title.group(1) if m_title else path.as_posix()
+              stale_lines.append(f":alarm_clock: **{title}** — select から {days} 日経過。実装するか撤退するか決めるのだ")
+
+          # --- 3. PAT 期限 ---
+          pat_lines = []
+          pat_file = Path(".github/pat-expiry")
+          if pat_file.is_file():
+              m = re.search(r"\d{4}-\d{2}-\d{2}", pat_file.read_text())
+              if m:
+                  expiry = datetime.strptime(m.group(0), "%Y-%m-%d").date()
+                  left = (expiry - today).days
+                  if left < 0:
+                      pat_lines.append(f":rotating_light: GIT_PUSH_TOKEN が {expiry} に**期限切れ**。routine の push が死んでるはずなのだ。ローテートして `.github/pat-expiry` を更新するのだ")
+                  elif left <= 14:
+                      pat_lines.append(f":warning: GIT_PUSH_TOKEN の期限まであと {left} 日 ({expiry})。ローテートの準備をするのだ")
+
+          parts = [f":newspaper: **lazy-product-lab {iso_year}-W{iso_week:02d} 週次ダイジェスト**"]
+          if idea_lines:
+              n_sel = sum(1 for l in idea_lines if "white_check_mark" in l)
+              parts.append(f"今週の生成: {len(idea_lines)} 案 / Select: {n_sel}\n" + "\n".join(idea_lines))
+          else:
+              parts.append("今週の生成は 0 案。routine が動いてないかもしれないのだ :thinking:")
+          if stale_lines:
+              parts.append("\n".join(stale_lines))
+          if pat_lines:
+              parts.append("\n".join(pat_lines))
+          parts.append(f"<https://github.com/{repo}/blob/main/STATS.md>")
+
+          msg = "\n\n".join(parts)
+          if len(msg) > 1900:
+              msg = msg[:1897] + "..."
+          with open("/tmp/payload.json", "w", encoding="utf-8") as f:
+              json.dump({"content": msg}, f, ensure_ascii=False)
+          print(msg)
+          PY
+
+      - name: Post to Discord webhook
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WEBHOOK:-}" ]; then
+            echo "::error::secret DISCORD_WEBHOOK_URL is not set"
+            exit 1
+          fi
+          http=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
+            -X POST -H 'Content-Type: application/json' \
+            --data-raw @/tmp/payload.json \
+            "$WEBHOOK")
+          echo "Discord HTTP $http"
+          cat /tmp/resp.txt
+          if [ "$http" != "204" ] && [ "$http" != "200" ]; then
+            exit 1
+          fi
