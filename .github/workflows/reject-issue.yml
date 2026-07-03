@@ -1,0 +1,165 @@
+name: Reject idea from Issue
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  # select-issue.yml と同じ理由で後発を待たせる (先発の push を捨てない)
+  group: reject-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  reject:
+    if: |
+      contains(github.event.issue.labels.*.name, 'reject') &&
+      startsWith(github.event.issue.title, 'Reject:')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Parse issue title
+        id: parse
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, re, sys
+          title = os.environ["ISSUE_TITLE"]
+          body = os.environ.get("ISSUE_BODY") or ""
+          # 期待形式: "Reject: 2026-W21-3#2 BarShelf"
+          m = re.match(r"^Reject:\s+(\d{4})-W(\d{1,2})-(\d+)#(\d+)\s+(.+)$", title.strip())
+          if not m:
+              sys.stderr.write(f"::error::Issue title does not match expected format: {title}\n")
+              sys.exit(1)
+          year, week, batch, item, idea_title = m.groups()
+          week = week.zfill(2)
+          batch = int(batch)
+          fname = "candidates.md" if batch == 1 else f"candidates-{batch}.md"
+          path = f"ideas/{year}/W{week}/{fname}"
+          # 却下理由: body の「理由:」行から抽出 (未記入なら既定文)
+          m_reason = re.search(r"理由[:：]\s*(\S.*)", body)
+          reason = m_reason.group(1).strip() if m_reason else "(理由未記入)"
+          reason = re.sub(r"\s+", " ", reason)[:200]
+          print(f"year={year}")
+          print(f"week={week}")
+          print(f"batch={batch}")
+          print(f"item={item}")
+          print(f"title={idea_title}")
+          print(f"candidates_path={path}")
+          print(f"reason={reason}")
+          PY
+
+      - name: Verify item exists in candidates file
+        id: verify
+        env:
+          CANDIDATES_PATH: ${{ steps.parse.outputs.candidates_path }}
+          ITEM: ${{ steps.parse.outputs.item }}
+        run: |
+          set -euo pipefail
+          if [ ! -f "$CANDIDATES_PATH" ]; then
+            echo "::error::candidates file not found: $CANDIDATES_PATH"
+            exit 1
+          fi
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, re, sys
+          path = os.environ["CANDIDATES_PATH"]
+          item = int(os.environ["ITEM"])
+          with open(path, encoding="utf-8") as f:
+              text = f.read()
+          for b in re.split(r"^---\s*$", text, flags=re.M):
+              m = re.search(r"^## (\d+)\.\s+(.+?)\s*$", b, flags=re.M)
+              if m and int(m.group(1)) == item:
+                  print(f"actual_title={m.group(2).strip()}")
+                  sys.exit(0)
+          sys.stderr.write(f"::error::item #{item} not found in {path}\n")
+          sys.exit(1)
+          PY
+
+      - name: Record rejection
+        env:
+          CANDIDATES_PATH: ${{ steps.parse.outputs.candidates_path }}
+          ITEM: ${{ steps.parse.outputs.item }}
+          ACTUAL_TITLE: ${{ steps.verify.outputs.actual_title }}
+          REASON: ${{ steps.parse.outputs.reason }}
+          YEAR: ${{ steps.parse.outputs.year }}
+          WEEK: ${{ steps.parse.outputs.week }}
+          BATCH: ${{ steps.parse.outputs.batch }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          today=$(TZ=Asia/Tokyo date '+%Y-%m-%d')
+          line="> Rejected: #${ITEM} (${ACTUAL_TITLE}) at ${today} — ${REASON}"
+          if ! grep -q "^> Rejected: #${ITEM} " "$CANDIDATES_PATH"; then
+            printf '\n%s\n' "$line" >> "$CANDIDATES_PATH"
+          fi
+          # 生成 routine が負例として読むコーパスにも追記
+          mkdir -p feedback
+          if [ ! -f feedback/rejections.md ]; then
+            {
+              echo "# Rejections"
+              echo
+              echo "> Reject Issue から自動追記される却下ログ。"
+              echo "> 生成 routine はこのリストを負例として参照し、同種の案を出さないこと。"
+              echo
+            } > feedback/rejections.md
+          fi
+          echo "- ${YEAR}-W${WEEK}-${BATCH}#${ITEM} ${ACTUAL_TITLE} — ${REASON} (#${ISSUE_NUMBER}, ${today})" >> feedback/rejections.md
+
+      - name: Update index & stats
+        run: python3 scripts/update_index.py
+
+      - name: Commit & push
+        env:
+          CANDIDATES_PATH: ${{ steps.parse.outputs.candidates_path }}
+          YEAR: ${{ steps.parse.outputs.year }}
+          WEEK: ${{ steps.parse.outputs.week }}
+          ACTUAL_TITLE: ${{ steps.verify.outputs.actual_title }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$CANDIDATES_PATH" feedback/rejections.md INDEX.md STATS.md
+          git commit -m "rejected: ${YEAR}-W${WEEK} - ${ACTUAL_TITLE} (via Issue)"
+          git push origin HEAD:main
+
+      - name: Comment on issue & close
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          REASON: ${{ steps.parse.outputs.reason }}
+        run: |
+          set -euo pipefail
+          body="却下を記録したのだ。理由「${REASON}」は次回以降の生成で負例として参照されるのだ。"
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$body"
+          gh issue close "$ISSUE_NUMBER" --repo "$REPO" --reason "not planned"
+
+      - name: Comment on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          body=$(cat <<EOF
+          :warning: reject の記録に失敗したのだ。
+
+          - Run: ${RUN_URL}
+          - Title 形式: \`Reject: YYYY-Www-batch#item Title\` (例: \`Reject: 2026-W21-3#2 BarShelf\`)
+          EOF
+          )
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$body"
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label "reject-failed"
