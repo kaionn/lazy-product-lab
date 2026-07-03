@@ -30,22 +30,56 @@ jobs:
           echo "file=$newest" >> "$GITHUB_OUTPUT"
           week=$(echo "$newest" | sed -E 's|^ideas/([0-9]+)/W([0-9]+)/.*|\1-W\2|')
           echo "week=$week" >> "$GITHUB_OUTPUT"
-          python3 - "$newest" "${{ github.repository }}" <<'PY' >> "$GITHUB_OUTPUT"
-          import os, re, sys
+
+      - name: Build Discord payloads (1 idea = 1 embed message)
+        if: steps.detect.outputs.no_change != 'true'
+        env:
+          FILE: ${{ steps.detect.outputs.file }}
+          WEEK: ${{ steps.detect.outputs.week }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, re
           from urllib.parse import quote
-          path = sys.argv[1]
-          repo = sys.argv[2]
+
+          path = os.environ["FILE"]
+          repo = os.environ["REPO"]
+          week_label = os.environ["WEEK"]
           fname = os.path.basename(path)
           m_batch = re.match(r"candidates(?:-(\d+))?\.md$", fname)
           batch = int(m_batch.group(1)) if m_batch and m_batch.group(1) else 1
           m_week = re.search(r"ideas/(\d{4})/W(\d{1,2})/", path)
           year = m_week.group(1) if m_week else ""
           week = m_week.group(2).zfill(2) if m_week else ""
+
           with open(path, encoding="utf-8") as f:
               text = f.read()
-          blocks = re.split(r"^---\s*$", text, flags=re.M)
-          items = []
-          for b in blocks:
+
+          # Discord embed の色 (案 1/2/3 で固定ローテーション)
+          COLORS = [0x5865F2, 0x57F287, 0xEB459E]
+
+          def issue_url(kind: str, num: str, title: str) -> str:
+              issue_title = f"{kind}: {year}-W{week}-{batch}#{num} {title}"
+              body = f"From: `{path}` #{num}"
+              if kind == "Reject":
+                  body += "\n\n理由: "
+              return (
+                  f"https://github.com/{repo}/issues/new"
+                  f"?labels={kind.lower()}"
+                  f"&title={quote(issue_title)}"
+                  f"&body={quote(body)}"
+              )
+
+          payloads = []
+          blob_url = f"https://github.com/{repo}/blob/main/{path}"
+          header = (
+              f":sparkles: **lazy-product-lab {week_label}** の 3 案できたのだ！\n"
+              f"気になる案はカードの Select、つまらなければ Reject を押すのだ。\n<{blob_url}>"
+          )
+          payloads.append({"content": header})
+
+          for b in re.split(r"^---\s*$", text, flags=re.M):
               m_title = re.search(r"^## (\d+)\.\s+(.+?)\s*$", b, flags=re.M)
               if not m_title:
                   continue
@@ -53,57 +87,61 @@ jobs:
               cat = re.search(r"^-\s*カテゴリ:\s*(.+?)\s*$", b, flags=re.M)
               line = re.search(r"^-\s*一行で:\s*(.+?)\s*$", b, flags=re.M)
               user = re.search(r"^-\s*対象ユーザー:\s*(.+?)\s*$", b, flags=re.M)
-              pain = re.search(r"^###\s*解決する痛み\s*\n(.+?)(?=\n###|\n---|\Z)", b, flags=re.M | re.DOTALL)
+              pain = re.search(
+                  r"^###\s*解決する痛み\s*\n(.+?)(?=\n###|\n---|\Z)",
+                  b, flags=re.M | re.DOTALL,
+              )
               cat_s = cat.group(1).strip() if cat else ""
               line_s = line.group(1).strip() if line else ""
               user_s = user.group(1).strip() if user else ""
               pain_s = re.sub(r"\s+", " ", pain.group(1)).strip() if pain else ""
-              if len(pain_s) > 140:
-                  pain_s = pain_s[:137] + "..."
-              issue_title = f"Select: {year}-W{week}-{batch}#{num} {title}"
-              issue_body = f"From: `{path}` #{num}"
-              select_url = (
-                  f"https://github.com/{repo}/issues/new"
-                  f"?labels=select"
-                  f"&title={quote(issue_title)}"
-                  f"&body={quote(issue_body)}"
-              )
-              header = f"**{num}. {title}**"
+              # embed description は 4096 まで。可読性優先で痛みは 800 字で切る
+              if len(pain_s) > 800:
+                  pain_s = pain_s[:797] + "..."
+              desc_parts = []
               meta = f"`{cat_s}` {line_s}".strip()
-              who = f"対象: {user_s}" if user_s else ""
-              detail = f"> {pain_s}" if pain_s else ""
-              action = f":arrow_forward: [これを Select する]({select_url})"
-              parts = [p for p in (header, meta, who, detail, action) if p]
-              items.append("\n".join(parts))
-          summary = "\n\n".join(items)
-          print("summary<<SUMMARY_EOF")
-          print(summary)
-          print("SUMMARY_EOF")
+              if meta:
+                  desc_parts.append(meta)
+              if user_s:
+                  desc_parts.append(f"**対象**: {user_s}")
+              if pain_s:
+                  desc_parts.append(f"> {pain_s}")
+              desc_parts.append(
+                  f":arrow_forward: [これを Select する]({issue_url('Select', num, title)})"
+                  f"　:wastebasket: [却下する]({issue_url('Reject', num, title)})"
+              )
+              embed = {
+                  "title": f"{num}. {title}"[:256],
+                  "description": "\n\n".join(desc_parts)[:4000],
+                  "color": COLORS[(int(num) - 1) % len(COLORS)],
+              }
+              payloads.append({"embeds": [embed]})
+
+          assert len(payloads) > 1, "candidates から案を 1 件も抽出できなかった"
+          with open("/tmp/payloads.json", "w", encoding="utf-8") as f:
+              json.dump(payloads, f, ensure_ascii=False)
+          print(f"{len(payloads)} messages prepared")
           PY
 
       - name: Post to Discord webhook
         if: steps.detect.outputs.no_change != 'true'
         env:
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          FILE: ${{ steps.detect.outputs.file }}
-          WEEK: ${{ steps.detect.outputs.week }}
-          SUMMARY: ${{ steps.detect.outputs.summary }}
-          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           if [ -z "${WEBHOOK:-}" ]; then
             echo "::error::secret DISCORD_WEBHOOK_URL is not set"
             exit 1
           fi
-          URL="https://github.com/${REPO}/blob/main/${FILE}"
-          MSG=$(printf ':sparkles: **lazy-product-lab %s** の 3 案できたのだ！\n\n%s\n\n<%s>\n\n気に入った案の :arrow_forward: 「Select」リンクをクリックして Submit するだけで深掘りが走るのだ。' "$WEEK" "$SUMMARY" "$URL")
-          payload=$(jq -nc --arg c "$MSG" '{content: $c}')
-          http=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
-            -X POST -H 'Content-Type: application/json' \
-            --data-raw "$payload" \
-            "$WEBHOOK")
-          echo "Discord HTTP $http"
-          cat /tmp/resp.txt
-          if [ "$http" != "204" ] && [ "$http" != "200" ]; then
-            exit 1
-          fi
+          jq -c '.[]' /tmp/payloads.json | while IFS= read -r payload; do
+            http=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
+              -X POST -H 'Content-Type: application/json' \
+              --data-raw "$payload" \
+              "$WEBHOOK")
+            echo "Discord HTTP $http"
+            if [ "$http" != "204" ] && [ "$http" != "200" ]; then
+              cat /tmp/resp.txt
+              exit 1
+            fi
+            sleep 1  # webhook レート制限 (30 req/min) への余裕
+          done
