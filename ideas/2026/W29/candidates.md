@@ -95,3 +95,5 @@ Vite + Vanilla TS + localStorage（正答率保存）、GitHub Pages で無料�
 > Rejected: #2 (grave) at 2026-07-15 — (理由未記入)
 
 > Rejected: #3 (hotkey-gym) at 2026-07-15 — (理由未記入)
+
+> Selected: #1 (ci-digest) at 2026-07-15
