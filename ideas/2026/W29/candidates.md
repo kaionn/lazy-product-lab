@@ -93,3 +93,5 @@ Vite + Vanilla TS + localStorage（正答率保存）、GitHub Pages で無料�
 - 全部却下なら `/lazy-product-generate` を再実行で OK なのだ
 
 > Rejected: #2 (grave) at 2026-07-15 — (理由未記入)
+
+> Rejected: #3 (hotkey-gym) at 2026-07-15 — (理由未記入)
