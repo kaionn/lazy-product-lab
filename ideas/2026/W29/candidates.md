@@ -91,3 +91,5 @@ Vite + Vanilla TS + localStorage（正答率保存）、GitHub Pages で無料�
 
 - どれを 1 週間使う? ローカルで `/lazy-product-pick 1` か `2` か `3` で選んで深掘りするのだ
 - 全部却下なら `/lazy-product-generate` を再実行で OK なのだ
+
+> Rejected: #2 (grave) at 2026-07-15 — (理由未記入)
