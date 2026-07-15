@@ -2,7 +2,7 @@
 
 > Picked: 2026-07-15 19:53 JST
 > From: candidates.md #1
-> Status: idea
+> Status: bootstrapped
 > Selected via: #2
 
 ## TL;DR
@@ -114,6 +114,6 @@ sequenceDiagram
 
 ## 次のアクション
 
-- [ ] `/lazy-product-bootstrap` で雛形リポ作成（API-only (Hono) ベースが近いが webhook 特化で調整）
+- [x] `/lazy-product-bootstrap` で雛形リポ作成 → https://github.com/kaionn/ci-digest
 - [ ] スタート曜日: 7/17 (金) 夜
 - [ ] 検証相手 5 人を当てる（automation repo を持っている知人優先）
