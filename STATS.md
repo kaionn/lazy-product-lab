@@ -6,7 +6,7 @@
 
 - 総生成: 87 案
 - Selected: 1 (1%) / Rejected: 3 (3%)
-- 深掘り済み (Status: idea): 0 / スタブのまま (Status: picked): 1
+- 深掘り済み (Status: idea): 1 / スタブのまま (Status: picked): 0
 - Bootstrap 済み (poc/): 0
 
 ## 週別
