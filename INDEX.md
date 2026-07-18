@@ -5,9 +5,15 @@
 
 | ID | タイトル | カテゴリ | 一行で | 状態 |
 |---|---|---|---|---|
+| 2026-W29-2#1 | ReadQueue | Browser Extension | 全タブの読了時間を計算して今日読める分だけ並べ直す | - |
+| 2026-W29-2#2 | ClipVault | デスクトップアプリ | コピーした直近 20 件を Ctrl+Shift+V でいつでも呼び戻す | - |
+| 2026-W29-2#3 | README.party | Web | GitHub の README URL を貼るだけで LP 風プレビューを即生成 | - |
 | 2026-W29-1#1 | ci-digest | Bot (GitHub App) | CI 失敗ログを AI が 3 行に圧縮して PR にコメント | ✅ selected |
 | 2026-W29-1#2 | grave | CLI | git ブランチ墓地を一覧して古いやつを一括掃除する | 🗑 rejected |
 | 2026-W29-1#3 | hotkey-gym | 学習ツール (Web) | アプリ別ショートカットキーを毎日 5 分で叩き込む反射道場 | 🗑 rejected |
+| 2026-W28-1#1 | PingMate | Bot (Slack) | 集中中かどうかをSlackに宣言、DM前に一秒確認 | - |
+| 2026-W28-1#2 | fixture-gen | CLI | JSON Schema を渡したらリアルなダミーデータが100件即出る | - |
+| 2026-W28-1#3 | diff-quiz | 学習ツール | 実際のOSSバグ修正diffを見て「何が悪かった?」を当てるクイズ | - |
 | 2026-W27-3#1 | ひとりブレストAI | Web (AI ツール) | AIに反論され続けてアイデアを10倍に広げる壁打ちツール | - |
 | 2026-W27-3#2 | PR Narrator | 業務ツール (Web) | git diff 貼ったら日本語PR説明文が30秒で出る | - |
 | 2026-W27-3#3 | TokoMap | モバイル (PWA) | 今の場所から「N分以内」で行ける観光スポットを地図表示 | - |
