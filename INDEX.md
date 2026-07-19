@@ -5,6 +5,9 @@
 
 | ID | タイトル | カテゴリ | 一行で | 状態 |
 |---|---|---|---|---|
+| 2026-W30-1#1 | ShipLog | Bot (Discord) | `/ship` 一発で今日の成果を鯖に流してサポートを集める | - |
+| 2026-W30-1#2 | StackTrace Linker | その他 (VS Code Extension) | コンテナ内スタックトレースをパスマッピングでクリック可能に変換 | - |
+| 2026-W30-1#3 | EstimateBattle | ゲーム | 有名 OSS の「答え」を当てる開発者向けデイリートリビアゲーム | - |
 | 2026-W29-2#1 | ReadQueue | Browser Extension | 全タブの読了時間を計算して今日読める分だけ並べ直す | - |
 | 2026-W29-2#2 | ClipVault | デスクトップアプリ | コピーした直近 20 件を Ctrl+Shift+V でいつでも呼び戻す | - |
 | 2026-W29-2#3 | README.party | Web | GitHub の README URL を貼るだけで LP 風プレビューを即生成 | - |
