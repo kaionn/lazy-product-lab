@@ -111,7 +111,7 @@ jobs:
           fi
           http=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
             -X POST -H 'Content-Type: application/json' \
-            --data-raw @/tmp/payload.json \
+            -d @/tmp/payload.json \
             "$WEBHOOK")
           echo "Discord HTTP $http"
           cat /tmp/resp.txt
