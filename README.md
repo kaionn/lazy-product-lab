@@ -29,9 +29,11 @@ ideas/
         └── ...
 poc/                          # 撤退コスト重視の雛形置き場 (bootstrap で生成)
 └── {slug}/
+prompts/
+└── generate-ideas.md         # 生成指示書 (GitHub Actions から参照)
 feedback/
 └── rejections.md             # 却下ログ (Reject Issue から自動追記、生成の負例)
-INDEX.md                      # 全アイデア一覧 (自動生成、生成 routine の重複回避に使用)
+INDEX.md                      # 全アイデア一覧 (自動生成、生成時の重複回避に使用)
 STATS.md                      # 生成数 / Select 率などの集計 (自動生成)
 scripts/update_index.py       # INDEX.md / STATS.md の再生成スクリプト
 ```
@@ -42,7 +44,7 @@ ISO 週番号 (`W01`-`W53`) を採用。
 
 | ステージ | タイミング | アクション | 担当 |
 |---------|-----------|-----------|------|
-| **0. 生成** | 月・水・金 朝 7:00 JST | 3 案生成 → push → Discord 通知 (1 案 1 カード、Select / Reject リンク付き) | Claude (Routine) + Actions |
+| **0. 生成** | 月・水・金 朝 7:00 JST | 3 案生成 → push → Discord 通知 (1 案 1 カード、Select / Reject リンク付き) | GitHub Actions (Claude Code) |
 | **1. Quick Pick** | Discord で気になった瞬間 | :arrow_forward: 「Select」リンク click → Issue Submit (1 タップ) | わたし |
 | 〃 | Issue 発火後 | `selected.md` スタブ生成 + push + Issue close | Actions (`select-issue.yml`) |
 | **1'. Reject** | つまらなかった瞬間 | :wastebasket: 「却下する」リンク click → 理由を書いて Submit | わたし |
@@ -107,7 +109,6 @@ Deep Dive 済みの `selected.md` を起点に、雛形リポを作成して初�
 
 `~/.claude/commands/` にローカル定義:
 
-- `/lazy-product-generate` — 3 案生成 → `candidates.md` に書いて push
 - `/lazy-product-pick` — Deep Dive → `selected.md` 生成 / スタブ上書き
 - `/lazy-product-bootstrap` — selected.md → リポ雛形作成
 
@@ -115,20 +116,22 @@ Deep Dive 済みの `selected.md` を起点に、雛形リポを作成して初�
 
 | Workflow | トリガー | やること |
 |---|---|---|
-| `notify-discord.yml` | `candidates*.md` push | 1 案 1 embed で Discord 通知 (Select / Reject リンク付き) |
+| `generate-ideas.yml` | 月水金 21:00 UTC (cron) | Claude が 3 案生成 → main へ commit/push → INDEX/STATS 更新 → Discord 通知 |
+| `notify-discord.yml` | `candidates*.md` push / `generate-ideas.yml` からの `workflow_call` | 1 案 1 embed で Discord 通知 (Select / Reject リンク付き) |
 | `select-issue.yml` | `select` ラベル Issue | `selected.md` スタブ生成 + index 更新 + Issue close |
 | `reject-issue.yml` | `reject` ラベル Issue | 却下理由を記録 (candidates + `feedback/rejections.md`) + Issue close |
 | `update-index.yml` | `ideas/**` / `poc/**` push | `INDEX.md` / `STATS.md` 再生成 |
-| `weekly-digest.yml` | 日曜 20:00 JST | 今週のまとめ + 撤退判断リマインド + PAT 期限警告を Discord へ |
+| `weekly-digest.yml` | 日曜 20:00 JST | 今週のまとめ + 撤退判断リマインドを Discord へ |
 | `deep-dive.yml` | `deep-dive` ラベル (実験) | Claude が selected スタブを深掘り版に上書き (要 `ANTHROPIC_API_KEY`) |
 
 ## 運用メモ
 
-- **生成 routine の重複回避**: routine prompt は生成前に `INDEX.md` と `feedback/rejections.md` を読む。prompt への追記内容は [docs/routine-prompt-patch.md](docs/routine-prompt-patch.md) を参照 (適用は claude.ai UI から手動)
-- **PAT 期限**: `GIT_PUSH_TOKEN` (fine-grained PAT、90 日 expire) の期限日を `.github/pat-expiry` に記録する。週次ダイジェストが期限 14 日前から警告する。**ローテートしたら必ずこのファイルも更新すること**
-- **Secrets**: `DISCORD_WEBHOOK_URL` (通知用) / `ANTHROPIC_API_KEY` (deep-dive 用、任意)。リポジトリにはコミットしない
+- **生成の重複回避**: 生成前に `INDEX.md` と `feedback/rejections.md` を読む。指示内容は [prompts/generate-ideas.md](prompts/generate-ideas.md) 参照
+- **Secrets**: `CLAUDE_CODE_OAUTH_TOKEN` (生成用、必須) / `DISCORD_WEBHOOK_URL` (通知用) / `ANTHROPIC_API_KEY` (deep-dive 用、任意)。リポジトリにはコミットしない
+- **cron 遅延**: GitHub Actions の cron は実測 50〜60 分ほど遅れて発火する。`generate-ideas.yml` の cron は名目 06:00 JST に設定してあり、実際の到着が従来通り 07:00 JST 前後になるよう調整してある
+- **`oven-sh/setup-bun@*` の allowlist**: `claude-code-action@v1` は内部で `oven-sh/setup-bun` を呼ぶため、リポジトリの Actions 設定 (allowed actions) の `patterns_allowed` に `anthropics/*` と `oven-sh/setup-bun@*` の両方が必要。無いと `Set up job` で即死する
 
 ## 関連
 
-- [Claude Code](https://claude.com/code) のスケジュール機能で生成を自動化
+- 生成は GitHub Actions + [claude-code-action](https://github.com/anthropics/claude-code-action) で自動化
 - ジャンル制約なし (雑食系)

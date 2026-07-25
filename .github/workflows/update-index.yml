@@ -1,8 +1,8 @@
 name: Update idea index & stats
 
-# 人間 / routine (PAT) の push で発火する。
-# select-issue.yml / reject-issue.yml の GITHUB_TOKEN push はこの workflow を
-# 発火しないため、それらは commit 前に scripts/update_index.py を自前実行する。
+# 人間の push で発火する。
+# generate-ideas.yml / select-issue.yml / reject-issue.yml の GITHUB_TOKEN push は
+# この workflow を発火しないため、それらは commit 前に scripts/update_index.py を自前実行する。
 on:
   push:
     branches: [main]
