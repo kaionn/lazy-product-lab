@@ -22,7 +22,7 @@
 | 2026-W30-1#3 | EstimateBattle | ゲーム | 有名 OSS の「答え」を当てる開発者向けデイリートリビアゲーム | - |
 | 2026-W29-2#1 | ReadQueue | Browser Extension | 全タブの読了時間を計算して今日読める分だけ並べ直す | - |
 | 2026-W29-2#2 | ClipVault | デスクトップアプリ | コピーした直近 20 件を Ctrl+Shift+V でいつでも呼び戻す | - |
-| 2026-W29-2#3 | README.party | Web | GitHub の README URL を貼るだけで LP 風プレビューを即生成 | - |
+| 2026-W29-2#3 | README.party | Web | GitHub の README URL を貼るだけで LP 風プレビューを即生成 | ✅ selected |
 | 2026-W29-1#1 | ci-digest | Bot (GitHub App) | CI 失敗ログを AI が 3 行に圧縮して PR にコメント | ✅ selected |
 | 2026-W29-1#2 | grave | CLI | git ブランチ墓地を一覧して古いやつを一括掃除する | 🗑 rejected |
 | 2026-W29-1#3 | hotkey-gym | 学習ツール (Web) | アプリ別ショートカットキーを毎日 5 分で叩き込む反射道場 | 🗑 rejected |

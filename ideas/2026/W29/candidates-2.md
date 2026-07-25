@@ -91,3 +91,5 @@ Next.js (App Router) + Tailwind + marked.js（Markdown パーサ）+ Vercel、Gi
 
 - どれを 1 週間使う? ローカルで `/lazy-product-pick 1` か `2` か `3` で選んで深掘りするのだ
 - 全部却下なら `/lazy-product-generate` を再実行で OK なのだ
+
+> Selected: #3 (README.party) at 2026-07-25
