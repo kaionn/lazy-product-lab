@@ -1,0 +1,120 @@
+name: Generate ideas (3 candidates)
+
+# CCR routine (claude.ai) から GitHub Actions へ移行した構成。
+# - 生成: claude-code-action が prompts/generate-ideas.md に従って candidates を書く（git 操作はしない）
+# - 反映: 本 workflow が main へ commit/push する（GITHUB_TOKEN、PAT 不要）
+# - 通知: GITHUB_TOKEN の push は後続 workflow を発火しないため、
+#         notify-discord.yml を workflow_call で直接呼ぶ（旧構成の通知欠落バグの再発防止）
+# - INDEX.md / STATS.md も同じ理由で本 workflow 内で再生成する
+# 認証は CLAUDE_CODE_OAUTH_TOKEN（Max サブスク、`claude setup-token` で生成した repo secret）。
+
+on:
+  schedule:
+    # 21:00 UTC = 名目 06:00 JST（月水金）。GHA の cron は実測 55 分ほど遅れて発火するため、
+    # 実際の到着は 07:00 JST 前後になり、CCR routine 時代の到着時刻を維持できる。
+    - cron: '0 21 * * 0,2,4'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write # claude-code-action@v1 の GitHub トークン OIDC 交換に必須（削除しない）
+
+concurrency:
+  group: generate-ideas
+  cancel-in-progress: false
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    outputs:
+      file: ${{ steps.paths.outputs.file }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Resolve output path (JST)
+        id: paths
+        run: |
+          set -euo pipefail
+          # 週番号は必ず JST で計算する。21:00 UTC 発火時点では UTC 日付がまだ前日のため、
+          # UTC 基準だと週跨ぎのときに前週のディレクトリへ書き込む事故になる。
+          YEAR=$(TZ=Asia/Tokyo date '+%G')
+          WEEK=$(TZ=Asia/Tokyo date '+%V')
+          DIR="ideas/${YEAR}/W${WEEK}"
+          mkdir -p "$DIR"
+          # 同週内の連番: candidates.md → candidates-2.md → candidates-3.md ...
+          # 連番決定を prompt (LLM) に任せると衝突するため、必ずコード側で決める。
+          if [ ! -e "${DIR}/candidates.md" ]; then
+            FILE="${DIR}/candidates.md"
+          else
+            n=2
+            while [ -e "${DIR}/candidates-${n}.md" ]; do
+              n=$((n + 1))
+            done
+            FILE="${DIR}/candidates-${n}.md"
+          fi
+          echo "file=${FILE}" >> "$GITHUB_OUTPUT"
+          echo "week_label=${YEAR}-W${WEEK}" >> "$GITHUB_OUTPUT"
+          echo "generated_at=$(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST')" >> "$GITHUB_OUTPUT"
+          echo "出力先: ${FILE}"
+
+      - name: Generate candidates with Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            Read prompts/generate-ideas.md and follow its instructions exactly.
+            The repository root is the current working directory.
+
+            出力先パス: ${{ steps.paths.outputs.file }}
+            週ラベル: ${{ steps.paths.outputs.week_label }}
+            生成時刻: ${{ steps.paths.outputs.generated_at }}
+          claude_args: |
+            --model claude-sonnet-5
+            --allowedTools "WebSearch,WebFetch,Read,Write,Edit,Glob,Grep,Bash"
+            --disallowedTools "Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git config:*),Bash(git remote:*),Bash(git reset:*),Bash(git rebase:*)"
+
+      - name: Commit and push candidates
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          FILE: ${{ steps.paths.outputs.file }}
+          WEEK_LABEL: ${{ steps.paths.outputs.week_label }}
+        run: |
+          set -euo pipefail
+          # claude-code-action が git 認証設定を自分のトークンで上書きしたまま終了するため、
+          # push 前に GITHUB_TOKEN へ張り直す（怠ると Invalid username or token になる）
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          if [ ! -f "$FILE" ]; then
+            if git log -1 --format='%an' | grep -qi claude; then
+              echo "::error::Claude が生成物を自分で commit している（禁止ガード突破）。直前コミット: $(git log -1 --oneline)"
+            else
+              echo "::error::生成物 ${FILE} が作られていない（生成失敗の可能性）"
+            fi
+            exit 1
+          fi
+
+          # 生成品質ガード: 案がちょうど 3 件あること
+          count=$(grep -cE '^## [0-9]+\. ' "$FILE" || true)
+          if [ "$count" -ne 3 ]; then
+            echo "::error::案の数が 3 件でない（検出 ${count} 件）。生成不良として中断"
+            exit 1
+          fi
+
+          # GITHUB_TOKEN の push は update-index.yml を発火しないため、ここで再生成する
+          python3 scripts/update_index.py
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$FILE" INDEX.md STATS.md
+          git commit -m "candidates: ${WEEK_LABEL} の 3 案を追加"
+          git pull --rebase origin main
+          git push origin main
+
+  notify:
+    needs: generate
+    uses: ./.github/workflows/notify-discord.yml
+    with:
+      file: ${{ needs.generate.outputs.file }}
+    secrets: inherit

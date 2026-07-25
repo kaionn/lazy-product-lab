@@ -2,9 +2,9 @@
 """ideas/ 配下の candidates*.md を走査して INDEX.md と STATS.md を再生成する。
 
 呼び出し元:
-- .github/workflows/update-index.yml (人間 / routine の push 時)
-- .github/workflows/select-issue.yml / reject-issue.yml (GITHUB_TOKEN push は
-  workflow を再発火しないため、commit 前に自前で実行する)
+- .github/workflows/update-index.yml (人間の push 時)
+- .github/workflows/generate-ideas.yml / select-issue.yml / reject-issue.yml
+  (GITHUB_TOKEN push は workflow を再発火しないため、commit 前に自前で実行する)
 """
 
 import re
@@ -83,7 +83,7 @@ def write_index(ideas: list[dict]) -> None:
         "# Idea Index",
         "",
         "> 自動生成 (`scripts/update_index.py`)。手で編集しない。",
-        "> 生成 routine はこのファイルを参照し、既出と同種・類似のアイデアを避けること。",
+        "> アイデア生成時にこのファイルを参照し、既出と同種・類似のアイデアを避けること。",
         "",
         "| ID | タイトル | カテゴリ | 一行で | 状態 |",
         "|---|---|---|---|---|",

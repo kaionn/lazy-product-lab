@@ -102,14 +102,14 @@ jobs:
           if ! grep -q "^> Rejected: #${ITEM} " "$CANDIDATES_PATH"; then
             printf '\n%s\n' "$line" >> "$CANDIDATES_PATH"
           fi
-          # 生成 routine が負例として読むコーパスにも追記
+          # アイデア生成が負例として読むコーパスにも追記
           mkdir -p feedback
           if [ ! -f feedback/rejections.md ]; then
             {
               echo "# Rejections"
               echo
               echo "> Reject Issue から自動追記される却下ログ。"
-              echo "> 生成 routine はこのリストを負例として参照し、同種の案を出さないこと。"
+              echo "> アイデア生成時にこのリストを負例として参照し、同種の案を出さないこと。"
               echo
             } > feedback/rejections.md
           fi
