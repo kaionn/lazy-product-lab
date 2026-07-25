@@ -3,7 +3,6 @@ name: Weekly digest to Discord
 # 日曜 20:00 JST に今週のまとめを Discord へ:
 # 1. 今週生成した案と select/reject 状況
 # 2. 撤退判断待ち (Picked から 7 日以上経過した selected)
-# 3. GIT_PUSH_TOKEN (fine-grained PAT) の期限警告 (.github/pat-expiry 基準)
 on:
   schedule:
     - cron: '0 11 * * 0' # 日曜 11:00 UTC = 20:00 JST
@@ -67,29 +66,14 @@ jobs:
               title = m_title.group(1) if m_title else path.as_posix()
               stale_lines.append(f":alarm_clock: **{title}** — select から {days} 日経過。実装するか撤退するか決めるのだ")
 
-          # --- 3. PAT 期限 ---
-          pat_lines = []
-          pat_file = Path(".github/pat-expiry")
-          if pat_file.is_file():
-              m = re.search(r"\d{4}-\d{2}-\d{2}", pat_file.read_text())
-              if m:
-                  expiry = datetime.strptime(m.group(0), "%Y-%m-%d").date()
-                  left = (expiry - today).days
-                  if left < 0:
-                      pat_lines.append(f":rotating_light: GIT_PUSH_TOKEN が {expiry} に**期限切れ**。routine の push が死んでるはずなのだ。ローテートして `.github/pat-expiry` を更新するのだ")
-                  elif left <= 14:
-                      pat_lines.append(f":warning: GIT_PUSH_TOKEN の期限まであと {left} 日 ({expiry})。ローテートの準備をするのだ")
-
           parts = [f":newspaper: **lazy-product-lab {iso_year}-W{iso_week:02d} 週次ダイジェスト**"]
           if idea_lines:
               n_sel = sum(1 for l in idea_lines if "white_check_mark" in l)
               parts.append(f"今週の生成: {len(idea_lines)} 案 / Select: {n_sel}\n" + "\n".join(idea_lines))
           else:
-              parts.append("今週の生成は 0 案。routine が動いてないかもしれないのだ :thinking:")
+              parts.append("今週の生成は 0 案。生成 workflow が動いてないかもしれないのだ :thinking:")
           if stale_lines:
               parts.append("\n".join(stale_lines))
-          if pat_lines:
-              parts.append("\n".join(pat_lines))
           parts.append(f"<https://github.com/{repo}/blob/main/STATS.md>")
 
           msg = "\n\n".join(parts)
