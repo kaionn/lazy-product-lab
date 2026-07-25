@@ -5,15 +5,15 @@
 ## 全体
 
 - 総生成: 108 案
-- Selected: 2 (1%) / Rejected: 3 (2%)
-- 深掘り済み (Status: idea): 0 / スタブのまま (Status: picked): 1
+- Selected: 3 (2%) / Rejected: 3 (2%)
+- 深掘り済み (Status: idea): 0 / スタブのまま (Status: picked): 2
 - Bootstrap 済み (poc/): 0
 
 ## 週別
 
 | 週 | 生成 | Selected | Rejected | Select 率 |
 |---|---|---|---|---|
-| 2026-W30 | 15 | 0 | 0 | 0% |
+| 2026-W30 | 15 | 1 | 0 | 6% |
 | 2026-W29 | 6 | 2 | 2 | 33% |
 | 2026-W28 | 3 | 0 | 0 | 0% |
 | 2026-W27 | 9 | 0 | 0 | 0% |

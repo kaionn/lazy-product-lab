@@ -91,3 +91,5 @@ Next.js + GitHub REST API (Octokit) + Anthropic API (Claude) + Supabase(生成�
 
 - どれを 1 週間使う? ローカルで `/lazy-product-pick 1` か `2` か `3` で選んで深掘りするのだ
 - 全部却下なら `/lazy-product-generate` を再実行で OK なのだ
+
+> Selected: #3 (OnboardBuddy) at 2026-07-25
