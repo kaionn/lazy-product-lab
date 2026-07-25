@@ -16,9 +16,13 @@ concurrency:
 
 jobs:
   select:
+    # 意図判定は title のみで行う: Discord の prefill URL (?labels=select) は GitHub 側の都合で
+    # サイレントに落ちることがあり、実際に 2 件の select を取りこぼした (Issue #5 / #7)。
+    # 認可は label ではなく author_association で明示する (public repo のため、
+    # title だけだと第三者の Issue で main への push を誘発できてしまう)。
     if: |
-      contains(github.event.issue.labels.*.name, 'select') &&
-      startsWith(github.event.issue.title, 'Select:')
+      startsWith(github.event.issue.title, 'Select:') &&
+      github.event.issue.author_association == 'OWNER'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -15,9 +15,10 @@ concurrency:
 
 jobs:
   reject:
+    # 判定方針は select-issue.yml と同じ (prefill label に依存せず、認可は author_association)
     if: |
-      contains(github.event.issue.labels.*.name, 'reject') &&
-      startsWith(github.event.issue.title, 'Reject:')
+      startsWith(github.event.issue.title, 'Reject:') &&
+      github.event.issue.author_association == 'OWNER'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
