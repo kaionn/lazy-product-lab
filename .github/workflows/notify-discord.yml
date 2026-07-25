@@ -5,6 +5,12 @@ on:
     branches: [main]
     paths:
       - 'ideas/**/candidates*.md'
+  workflow_call:
+    inputs:
+      file:
+        description: 'candidates ファイルのパス（例: ideas/2026/W30/candidates-5.md）'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -13,20 +19,30 @@ jobs:
   notify:
     runs-on: ubuntu-latest
     steps:
+      # workflow_call 経由では github.sha が「生成前の commit」を指すため、
+      # 生成 workflow が push した最新 main を明示的に取得する必要がある。
+      # push トリガー経由では従来どおり github.sha を見る（git diff HEAD^ HEAD のため）。
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.file && 'main' || github.sha }}
           fetch-depth: 2
 
       - name: Detect newest candidates file from this push
         id: detect
+        env:
+          INPUT_FILE: ${{ inputs.file }}
         run: |
           set -euo pipefail
-          changed=$(git diff --name-only HEAD^ HEAD | grep -E '^ideas/.+/candidates.*\.md$' || true)
-          if [ -z "$changed" ]; then
-            echo "no_change=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ -n "${INPUT_FILE:-}" ]; then
+            newest="$INPUT_FILE"
+          else
+            changed=$(git diff --name-only HEAD^ HEAD | grep -E '^ideas/.+/candidates.*\.md$' || true)
+            if [ -z "$changed" ]; then
+              echo "no_change=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            newest=$(echo "$changed" | sort -V | tail -1)
           fi
-          newest=$(echo "$changed" | sort -V | tail -1)
           echo "file=$newest" >> "$GITHUB_OUTPUT"
           week=$(echo "$newest" | sed -E 's|^ideas/([0-9]+)/W([0-9]+)/.*|\1-W\2|')
           echo "week=$week" >> "$GITHUB_OUTPUT"
