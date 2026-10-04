@@ -1,3 +1,6 @@
 .claude/
 .harness-mem/
 tmp/
+
+# Ephemeral Slack shadow receipts (uploaded separately by Actions)
+.notification-state/
