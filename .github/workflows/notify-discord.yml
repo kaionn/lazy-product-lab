@@ -15,6 +15,12 @@ on:
 permissions:
   contents: read
 
+# Safe default retains Discord. Enable only after bot installation and channel verification.
+env:
+  NOTIFICATION_MODE: ${{ vars.NOTIFICATION_MODE || 'discord' }}
+  SLACK_ALERT_CHANNEL_ID: ${{ vars.SLACK_ALERT_CHANNEL_ID }}
+  SLACK_REPORT_CHANNEL_ID: ${{ vars.SLACK_REPORT_CHANNEL_ID }}
+
 jobs:
   notify:
     runs-on: ubuntu-latest
@@ -142,6 +148,7 @@ jobs:
       - name: Post to Discord webhook
         if: steps.detect.outputs.no_change != 'true'
         env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           set -euo pipefail
@@ -149,6 +156,12 @@ jobs:
             echo "::error::secret DISCORD_WEBHOOK_URL is not set"
             exit 1
           fi
+          # One grouped Slack message per candidate batch; Discord keeps its cards.
+          python3 - <<'PYTHON' | python3 scripts/notify_bridge.py --event candidates >/dev/null || true
+          import json
+          payloads = json.load(open("/tmp/payloads.json"))
+          print(json.dumps({"content": "\n\n".join(p.get("content", "") for p in payloads), "embeds": [e for p in payloads for e in p.get("embeds", [])]}))
+          PYTHON
           jq -c '.[]' /tmp/payloads.json | while IFS= read -r payload; do
             http=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
               -X POST -H 'Content-Type: application/json' \
@@ -161,3 +174,13 @@ jobs:
             fi
             sleep 1  # webhook レート制限 (30 req/min) への余裕
           done
+
+      - name: Preserve Slack shadow delivery receipts
+        if: ${{ always() && vars.NOTIFICATION_MODE == 'shadow' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: slack-delivery-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
+          path: .notification-state/*.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
