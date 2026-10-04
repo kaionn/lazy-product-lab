@@ -159,11 +159,13 @@ jobs:
             exit 1
           fi
           # One grouped Slack message per candidate batch; Discord keeps its cards.
-          python3 - <<'PYTHON' | python3 scripts/notify_bridge.py --event candidates >/dev/null || true
+          SLACK_RESULT=$(python3 - <<'PYTHON' | python3 scripts/notify_bridge.py --event candidates
           import json
           payloads = json.load(open("/tmp/payloads.json"))
           print(json.dumps({"content": "\n\n".join(p.get("content", "") for p in payloads), "embeds": [e for p in payloads for e in p.get("embeds", [])]}))
           PYTHON
+          ) || SLACK_RESULT='{"status":"adapter_failed"}'
+          if ! python3 scripts/notify_bridge.py --discord-gate --discord-result "$SLACK_RESULT"; then exit 0; fi
           jq -c '.[]' /tmp/payloads.json | while IFS= read -r payload; do
             http=$(curl -sS -o /tmp/resp.txt -w '%{http_code}' \
               -X POST -H 'Content-Type: application/json' \
@@ -176,9 +178,10 @@ jobs:
             fi
             sleep 1  # webhook レート制限 (30 req/min) への余裕
           done
+          python3 scripts/notify_bridge.py --discord-ack-status 204 --discord-result "$SLACK_RESULT"
 
       - name: Preserve notification delivery receipts and sanitized recovery outbox
-        if: ${{ always() && vars.NOTIFICATION_MODE == 'shadow' }}
+        if: ${{ always() && (env.NOTIFICATION_MODE == 'shadow' || env.NOTIFICATION_MODE == 'slack') }}
         uses: actions/upload-artifact@v4
         with:
           name: slack-delivery-${{ github.run_id }}-${{ github.run_attempt }}-${{ github.job }}
@@ -188,3 +191,7 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 90
+
+      - name: Audit primary notification completion after business work
+        if: ${{ always() && env.NOTIFICATION_MODE == 'slack' }}
+        run: python3 scripts/notify_bridge.py --audit
