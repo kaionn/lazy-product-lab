@@ -1,5 +1,7 @@
 # lazy-product-lab
 
+> 新しい推奨導線: [証拠 → 承認済みローカル試作 → review → 配布・計測](docs/opportunity-workflow.md)。以下の自動生成/Issue操作は既存の互換経路で、生成件数やActions成功は製品成果を意味しません。
+
 > 月水金、雑にプロダクトを考える仕組み。
 
 ## なに
