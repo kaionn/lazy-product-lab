@@ -8,6 +8,7 @@ on:
       - 'src/**'
       - 'tests/test_notify_bridge.py'
       - 'tests/test_slack_smoke.py'
+      - 'tests/test_notify_ledger.py'
       - 'tests/test_slack_reconcile.py'
   workflow_dispatch:
     inputs:
@@ -40,6 +41,7 @@ jobs:
         run: |
           python3 tests/test_notify_bridge.py
           python3 tests/test_slack_smoke.py
+          python3 tests/test_notify_ledger.py
           python3 tests/test_slack_reconcile.py
 
   owner-smoke:
