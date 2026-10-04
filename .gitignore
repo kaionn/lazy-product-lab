@@ -4,3 +4,6 @@ tmp/
 
 # Ephemeral Slack shadow receipts (uploaded separately by Actions)
 .notification-state/
+
+.original-receipts/
+.reconcile-state/

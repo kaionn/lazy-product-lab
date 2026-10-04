@@ -1,0 +1,49 @@
+name: Reconcile bounded Slack synthetic image
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: slack-synthetic-reconcile-v1
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    if: github.ref == 'refs/heads/main' && github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: slack-smoke-37171067253-1
+          path: .original-receipts
+          github-token: ${{ github.token }}
+          run-id: 37171067253
+      - uses: actions/cache/restore@v4
+        id: receipt
+        with:
+          path: .reconcile-state
+          key: slack-synthetic-reconcile-v1
+      - name: Reconcile only the observed synthetic thread
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_ALERT_CHANNEL_ID: ${{ vars.SLACK_ALERT_CHANNEL_ID }}
+          SLACK_REPORT_CHANNEL_ID: ${{ vars.SLACK_REPORT_CHANNEL_ID }}
+        run: python3 scripts/slack-reconcile.py
+      - uses: actions/cache/save@v4
+        if: always() && steps.receipt.outcome == 'success' && steps.receipt.outputs.cache-hit != 'true'
+        with:
+          path: .reconcile-state
+          key: slack-synthetic-reconcile-v1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: slack-reconcile-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .reconcile-state/*.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
