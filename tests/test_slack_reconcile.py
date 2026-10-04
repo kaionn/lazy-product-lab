@@ -20,7 +20,7 @@ class ReconcileTests(unittest.TestCase):
         self.env.start(); self.addCleanup(self.env.stop)
         Path('.original-receipts').mkdir()
         Path('.original-receipts/result.json').write_text(json.dumps({'test_id':module.TEST_ID,'status':'needs_review'}))
-        Path('.original-receipts/event.json').write_text(json.dumps({'parts':[module.PARENT],'status':'needs_reconciliation','key':'original'}))
+        Path('.original-receipts/event.json').write_text(json.dumps({'parts':[module.PARENT],'status':'needs_reconciliation','key':'030bc706e80da3f00cfeb3223049d6571acb74d4d148d9ea8f748226effe9bb6'}))
         self.identity=patch.object(module.smoke,'identity',return_value={'status':'verified'}); self.identity.start(); self.addCleanup(self.identity.stop)
 
     def test_resume_posts_only_file_and_alert_then_checks_duplicates(self):
@@ -29,7 +29,7 @@ class ReconcileTests(unittest.TestCase):
             self.assertEqual([x.args[0] for x in api.call_args_list],['files.getUploadURLExternal','files.completeUploadExternal'])
             self.assertEqual(api.call_args_list[1].args[1]['thread_ts'], module.PARENT)
             self.assertEqual([x.args[1] for x in mirror.call_args_list],['reports','alerts','alerts'])
-            self.assertEqual(json.loads(Path('.reconcile-state/original.json').read_text())['file_id'],'F1')
+            self.assertEqual(json.loads(Path('.reconcile-state/030bc706e80da3f00cfeb3223049d6571acb74d4d148d9ea8f748226effe9bb6.json').read_text())['file_id'],'F1')
 
     def test_unknown_error_text_is_never_recorded(self):
         with patch.object(module,'classified_api',side_effect=RuntimeError('FAKE PRIVATE RESPONSE')):
@@ -47,7 +47,7 @@ class ReconcileTests(unittest.TestCase):
             self.assertEqual(module.main(),1); api.assert_not_called()
 
     def test_rerun_and_wrong_parent_stop_before_api(self):
-        Path('.original-receipts/event.json').write_text(json.dumps({'parts':['wrong'],'status':'needs_reconciliation','key':'original'}))
+        Path('.original-receipts/event.json').write_text(json.dumps({'parts':['wrong'],'status':'needs_reconciliation','key':'030bc706e80da3f00cfeb3223049d6571acb74d4d148d9ea8f748226effe9bb6'}))
         with patch.object(module,'classified_api') as api:
             self.assertEqual(module.main(),1); api.assert_not_called()
         os.environ['GITHUB_RUN_ATTEMPT']='2'

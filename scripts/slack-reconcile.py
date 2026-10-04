@@ -2,12 +2,13 @@
 No business payloads or tokens are printed. Never posts the report parent again.
 """
 import json
+import hashlib
 import os
 from pathlib import Path
 import sys
 import urllib.error
 from urllib.parse import urlparse
-from notify_bridge import api, request, write_json, mirror
+from notify_bridge import api, request, write_json, mirror, render
 import importlib.util
 spec = importlib.util.spec_from_file_location("smoke", Path(__file__).with_name("slack-smoke.py"))
 smoke = importlib.util.module_from_spec(spec)
@@ -63,6 +64,10 @@ def main():
         text = {"content": f"[SYNTHETIC MIGRATION TEST {TEST_ID}] Report text + generated color-pattern image. No private data. Discord remains active."}
         # Rebuild original event receipt with confirmed image state. mirror must do zero I/O.
         receipt = next(x for x in prior if x.get("parts") == [PARENT])
+        identity = {"repo": "kaionn/lazy-product-lab", "event": "synthetic:" + TEST_ID, "category": "reports", "run": "37171067253", "body": render(text, "reports", "kaionn/lazy-product-lab"), "file": hashlib.sha256(payload).hexdigest()}
+        key = hashlib.sha256(json.dumps(identity, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        if key != receipt["key"]:
+            raise RuntimeError("dedup_key_mismatch")
         receipt.update(status="sent", file_id=result["file_id"], file_sent=True)
         write_json(Path(".reconcile-state") / (receipt["key"] + ".json"), receipt)
         duplicate = mirror(text, "reports", "synthetic:" + TEST_ID, str(image))
@@ -81,7 +86,7 @@ def main():
         result["status"] = "api_accepted"; result["stage"] = "complete"
         write_json(dest, result); print(json.dumps(result)); return 0
     except Exception as error:
-        allowed = KNOWN_ERRORS | {"unclassified_api_rejection", "upload_url_host_rejected", "dedup_check_failed", "alert_incomplete"}
+        allowed = KNOWN_ERRORS | {"unclassified_api_rejection", "upload_url_host_rejected", "dedup_check_failed", "dedup_key_mismatch", "alert_incomplete"}
         result["error_class"] = str(error) if isinstance(error, RuntimeError) and str(error) in allowed else "transport_or_validation_failure"
         result["status"] = "needs_reconciliation"
         write_json(dest, result)
