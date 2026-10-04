@@ -5,7 +5,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: slack-synthetic-reconcile-v1
+  group: slack-synthetic-reconcile-form-v2
   cancel-in-progress: false
 jobs:
   reconcile:
@@ -23,11 +23,17 @@ jobs:
           path: .original-receipts
           github-token: ${{ github.token }}
           run-id: 37171067253
+      - uses: actions/download-artifact@v4
+        with:
+          name: slack-reconcile-37171624215-1
+          path: .diagnostic-receipts
+          github-token: ${{ github.token }}
+          run-id: 37171624215
       - uses: actions/cache/restore@v4
         id: receipt
         with:
           path: .reconcile-state
-          key: slack-synthetic-reconcile-v1
+          key: slack-synthetic-reconcile-form-v2
       - name: Reconcile only the observed synthetic thread
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -38,7 +44,7 @@ jobs:
         if: always() && steps.receipt.outcome == 'success' && steps.receipt.outputs.cache-hit != 'true'
         with:
           path: .reconcile-state
-          key: slack-synthetic-reconcile-v1
+          key: slack-synthetic-reconcile-form-v2
       - uses: actions/upload-artifact@v4
         if: always()
         with:

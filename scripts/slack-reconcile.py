@@ -20,7 +20,10 @@ CHANNEL = "C0C6LGRJ30R"
 KNOWN_ERRORS = {"invalid_auth", "missing_scope", "no_permission", "not_in_channel", "file_uploads_disabled", "file_upload_size_restricted", "file_type_not_allowed", "storage_limit_reached", "invalid_arguments", "missing_argument", "not_allowed_token_type", "ratelimited", "internal_error", "service_unavailable"}
 
 def classified_api(method, data, token):
-    body = json.loads(request("https://slack.com/api/" + method, data=data, token=token))
+    form = method in {"files.getUploadURLExternal", "files.completeUploadExternal"}
+    if form:
+        data = {k: json.dumps(v) if isinstance(v, (list, dict)) else v for k, v in data.items()}
+    body = json.loads(request("https://slack.com/api/" + method, data=data, token=token, form=form))
     if body.get("ok") is not True:
         code = body.get("error")
         raise RuntimeError(code if code in KNOWN_ERRORS else "unclassified_api_rejection")
@@ -39,6 +42,8 @@ def main():
         assert os.environ.get("SLACK_REPORT_CHANNEL_ID") == CHANNEL
         assert any(x.get("test_id") == TEST_ID and x.get("status") == "needs_review" for x in prior)
         assert any(x.get("parts") == [PARENT] and x.get("status") == "needs_reconciliation" and not x.get("file_id") for x in prior)
+        diagnostic = json.loads(Path(".diagnostic-receipts/reconcile-result.json").read_text())
+        assert diagnostic.get("stage") == "get_upload_url" and diagnostic.get("error_class") == "invalid_arguments" and not diagnostic.get("file_id")
         result["identity"] = smoke.identity()
         token = os.environ["SLACK_BOT_TOKEN"]
         image = Path(".reconcile-state/synthetic-migration-test.png")
