@@ -9,3 +9,5 @@ tmp/
 .reconcile-state/
 
 .diagnostic-receipts/
+
+.notification-outbox/
