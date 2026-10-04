@@ -18,6 +18,8 @@ class ReconcileTests(unittest.TestCase):
         self.cwd=os.getcwd(); os.chdir(self.tmp.name); self.addCleanup(os.chdir,self.cwd)
         self.env=patch.dict(os.environ,{'GITHUB_REPOSITORY':'kaionn/lazy-product-lab','GITHUB_RUN_ATTEMPT':'1','SLACK_REPORT_CHANNEL_ID':module.CHANNEL,'SLACK_BOT_TOKEN':'FAKE'},clear=True)
         self.env.start(); self.addCleanup(self.env.stop)
+        Path('.diagnostic-receipts').mkdir()
+        Path('.diagnostic-receipts/reconcile-result.json').write_text(json.dumps({'stage':'get_upload_url','error_class':'invalid_arguments'}))
         Path('.original-receipts').mkdir()
         Path('.original-receipts/result.json').write_text(json.dumps({'test_id':module.TEST_ID,'status':'needs_review'}))
         Path('.original-receipts/event.json').write_text(json.dumps({'parts':[module.PARENT],'status':'needs_reconciliation','key':'030bc706e80da3f00cfeb3223049d6571acb74d4d148d9ea8f748226effe9bb6'}))

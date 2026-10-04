@@ -7,3 +7,5 @@ tmp/
 
 .original-receipts/
 .reconcile-state/
+
+.diagnostic-receipts/
