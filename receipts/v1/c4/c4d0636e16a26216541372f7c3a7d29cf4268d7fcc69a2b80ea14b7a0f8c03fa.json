@@ -1,1 +1,1 @@
-{"channel": "C0C6GSL6H7Z", "event": "candidates", "key": "c4d0636e16a26216541372f7c3a7d29cf4268d7fcc69a2b80ea14b7a0f8c03fa", "mode": "slack", "parts": [], "repo": "kaionn/lazy-product-lab", "run_attempt": "1", "run_id": "38824181911", "schema": 1, "stage": "reserved", "status": "sending"}
+{"channel": "C0C6GSL6H7Z", "event": "candidates", "key": "c4d0636e16a26216541372f7c3a7d29cf4268d7fcc69a2b80ea14b7a0f8c03fa", "mode": "slack", "parts": [], "repo": "kaionn/lazy-product-lab", "run_attempt": "1", "run_id": "38824181911", "schema": 1, "stage": "text:0", "status": "sending"}
